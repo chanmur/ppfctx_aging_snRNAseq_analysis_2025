@@ -1,0 +1,956 @@
+# The following rmd file runs all the code for the analysis described in the article: ""
+
+# Main Setup
+## Directory Creation
+```{r}
+# Adding path to the project folder within the double-quotes below
+home_dir <- getwd()
+
+# Creating a list to hold some of the directory paths we re-use throughout
+dir_list <- list()
+dir_list$home <- home_dir
+dir_list$data <- paste(dir_list$home, "data", sep = "/")
+dir_list$scripts <- paste(dir_list$home, "src/R", sep = "/")
+dir_list$plots <- paste(dir_list$home, "plots", sep = "/")
+dir_list$docs <- paste(dir_list$home, "docs", sep = "/")
+dir_list$rds <- paste(dir_list$home, "rds", sep = "/")
+
+lapply(dir_list, dir.create, showWarnings = FALSE, recursive = TRUE)
+
+saveRDS(dir_list, file = paste(dir_list$rds, "dir_list.rds", sep = "/"), compress = FALSE)
+gc()
+```
+
+## Loading Libraries
+```{r}
+# Loading the most frequently used libraries in this rmd file
+suppressMessages({
+  library(dplyr)
+  library(tidyr)
+  library(tibble)
+  library(stringr)
+  library(ggplot2)
+  library(Seurat)
+  })
+```
+
+## Setting seed for session
+```{r}
+seed_use <- 12345
+set.seed(seed_use)
+```
+
+# Figure Setup
+## Ordered lists
+```{r}
+sample_ids <- c("y1","y2","y3","y4","y5","y6","y7","y8","y9","m1","m2","m3","m4","m5","m6","m7","m8","o1","o2","o3","o4","o5","o6","o7","o8","o9","o10","o11","o12","o13","o14")
+
+age_group_levels <- c("Young", "Middle Age", "Old")
+
+sex_levels <- c("Male", "Female")
+
+cell_type_levels <- c("Oligodendrocytes", "Microglia", "Astrocytes", "OPCs", "Excitatory Neurons", "Inhibitory Neurons", "Endothelial Cells", "Fibroblast-like Cells", "T Cells", "Unspecified 2", "Unspecified 1")
+```
+
+## Loading and formatting data for figures
+```{r}
+# For cohort-related plots
+cohort_meta <- readRDS(paste(dir_list$rds, "cohort_meta.rds", sep = "/"))
+
+cohort_meta <- cohort_meta %>% 
+  mutate(sample_id = factor(sample_id, levels = sample_ids), 
+         age_group = factor(age_group, levels = age_group_levels),
+         sex = factor(sex, levels = sex_levels))
+
+# For QC-related plots
+training_data_so_qc <- readRDS(paste(dir_list$rds, "training_data_so_qc.rds", sep = "/"))
+
+training_data_so_qc@meta.data <- training_data_so_qc@meta.data %>% 
+  mutate(orig.ident = factor(orig.ident, levels = sample_ids), 
+         age_group = factor(age_group, levels = age_group_levels),
+         sex = factor(sex, levels = sex_levels))
+
+# For Supp Fig 1i
+training_data_so_doublets <- readRDS(paste(dir_list$rds, "training_data_so_doublets.rds", sep = "/"))
+
+training_data_so_doublets@meta.data <- training_data_so_doublets@meta.data %>% 
+  mutate(orig.ident = factor(orig.ident, levels = sample_ids), 
+         age_group = factor(age_group, levels = age_group_levels),
+         sex = factor(sex, levels = sex_levels),
+         cell_type = factor(cell_type, levels = cell_type_levels))
+
+# Final seurat object with all QC and transformations performed
+training_data_so_final <- readRDS(paste(dir_list$rds, "training_data_so_final.rds", sep = "/"))
+
+training_data_so_final@meta.data <- training_data_so_final@meta.data %>% 
+  mutate(orig.ident = factor(orig.ident, levels = sample_ids), 
+         age_group = factor(age_group, levels = age_group_levels),
+         sex = factor(sex, levels = sex_levels),
+         cell_type = factor(cell_type, levels = cell_type_levels))
+
+# Final seurat object with all genes scaled - for heatmaps in Fig 2 and Supp Fig 2
+training_data_so_final_scaled <- readRDS(paste(dir_list$rds, "training_data_so_final_scaled.rds", sep = "/"))
+
+training_data_so_final_scaled@meta.data <- training_data_so_final_scaled@meta.data %>% 
+  mutate(orig.ident = factor(orig.ident, levels = sample_ids), 
+         age_group = factor(age_group, levels = age_group_levels),
+         sex = factor(sex, levels = sex_levels),
+         cell_type = factor(cell_type, levels = cell_type_levels))
+
+# Objects with lists of differentially expressed genes from all major cell types
+deg_list <- readRDS(paste(dir_list$rds, "deg_list.rds", sep = "/"))
+deg_filt_list <- readRDS(paste(dir_list$rds, "deg_filt_list.rds", sep = "/"))
+
+# Object with gene ontology results from various age group comparisons
+go_ora_list <- readRDS(paste(dir_list$rds, "go_ora_list.rds", sep = "/"))
+
+# Final seurat object including only major cell types and containing the UMAP model
+training_data_so_final_major_types <- readRDS(paste(dir_list$rds, "training_data_so_final_major_types.rds", sep = "/"))
+
+training_data_so_final_major_types@meta.data <- training_data_so_final_major_types@meta.data %>% 
+  mutate(orig.ident = factor(orig.ident, levels = sample_ids), 
+         age_group = factor(age_group, levels = age_group_levels),
+         sex = factor(sex, levels = sex_levels),
+         cell_type = factor(cell_type, levels = cell_type_levels))
+
+# Seurat object containing the Frohlich dataset used, and the corresponding label predictions and UMAP projection coordinates
+frohlich_data_so_major_types_umap_proj <- readRDS(paste(dir_list$rds, "frohlich_data_so_major_types_umap_proj.rds", sep = "/"))
+
+frohlich_data_so_major_types_umap_proj@meta.data <- frohlich_data_so_major_types_umap_proj@meta.data %>% 
+  mutate(major_celltypes_relabel = factor(major_celltypes_relabel, levels = cell_type_levels))
+
+# Seurat object containing the Velmeshev dataset used, and the corresponding label predictions and UMAP projection coordinates
+velmeshev_data_so_major_types_umap_proj <- readRDS(paste(dir_list$rds, "velmeshev_data_so_major_types_umap_proj.rds", sep = "/"))
+
+velmeshev_data_so_major_types_umap_proj@meta.data <- velmeshev_data_so_major_types_umap_proj@meta.data %>% 
+  mutate(cell_type = factor(cell_type, levels = cell_type_levels))
+
+# Top genes expressed in each cell type in the training data
+training_data_all_markers <- readRDS(paste(dir_list$rds, "training_data_all_markers.rds", sep = "/"))
+```
+
+
+# Figures
+## Fig 1
+### Fig 1b - Age Distribution Plot
+```{r}
+plot_name <- paste(dir_list$plots, "Fig_1b", sep = "/")
+
+cohort_meta %>% 
+  ggplot(aes(x = age_group, fill = age_group, y = age)) +
+  geom_boxplot() +
+  geom_dotplot(binaxis = "y", stackdir = "center", dotsize = 0.5, color = "black", fill = "black") +
+  theme_classic() +
+  labs(y = "Sample Age (years)", fill = "Age Group") +
+  	theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust=1, size = 8),
+  	      axis.title.x = element_blank())
+
+ggsave(paste(plot_name, "svg", sep = "."), device = "svg", bg = "white", limitsize = FALSE, width = 7, height = 5)
+ggsave(paste(plot_name, "png", sep = "."), device = "png", bg = "white", limitsize = FALSE, width = 7, height = 5, dpi = 320)
+```
+
+
+### Fig 1c - PMI Plot
+```{r}
+plot_name <- paste(dir_list$plots, "Fig_1c", sep = "/")
+
+cohort_meta %>% 
+  ggplot(aes(x = age_group, fill = age_group, y = pmi)) +
+  geom_boxplot() +
+  geom_dotplot(binaxis = "y", stackdir = "center", dotsize = 0.5, color = "black", fill = "black") +
+  theme_classic() +
+  labs(y = "PMI (hours)", fill = "Age Group") +
+  	theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust=1, size = 8),
+  	      axis.title.x = element_blank())
+
+ggsave(paste(plot_name, "svg", sep = "."), device = "svg", bg = "white", limitsize = FALSE, width = 7, height = 5)
+ggsave(paste(plot_name, "png", sep = "."), device = "png", bg = "white", limitsize = FALSE, width = 7, height = 5, dpi = 320)
+```
+
+### Fig 1d - Sex Ratio Plot
+```{r}
+plot_name <- paste(dir_list$plots, "Fig_1d", sep = "/")
+
+cohort_meta %>% 
+  select(age_group, sex) %>%
+    summarise(count = n(), .by = c("age_group", "sex")) %>% 
+    mutate(prop = count/sum(count)) %>% 
+  	ggplot(aes(x=age_group, fill=sex, y=prop)) +
+  	geom_bar(position = "fill", stat = "identity", width = 0.5) +
+  	theme_classic() +
+    labs(y = "% of Samples", fill = "Sex") +
+  	theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust=1, size = 8),
+  	      axis.title.x = element_blank())
+
+ggsave(paste(plot_name, "svg", sep = "."), device = "svg", bg = "white", limitsize = FALSE, width = 7, height = 5)
+ggsave(paste(plot_name, "png", sep = "."), device = "png", bg = "white", limitsize = FALSE, width = 7, height = 5, dpi = 320)
+```
+
+### Fig 1e - UMAP All Clusters
+```{r}
+plot_name <- paste(dir_list$plots, "Fig_1e", sep = "/")
+
+DimPlot(training_data_so_final, reduction = "umap_harmony", group.by = "seurat_clusters",  label = T, label.size = 3, repel = T) + NoAxes() + NoLegend() + ggtitle(NULL)
+
+ggsave(paste(plot_name, "svg", sep = "."), device = "svg", bg = "white", limitsize = FALSE, width = 7, height = 7)
+ggsave(paste(plot_name, "png", sep = "."), device = "png", bg = "white", limitsize = FALSE, width = 7, height = 7, dpi = 320)
+```
+
+### Fig 1f - Cell Type Markers
+```{r}
+plot_name <- paste(dir_list$plots, "Fig_1f", sep = "/")
+
+cell_type_markers <- c("MOBP", "P2RY12", "AQP4", "PDGFRA", "SATB2", "GAD1")
+for (gene in cell_type_markers) {
+  sub_plot_name <- paste(plot_name, gene, sep = "_")
+    
+  FeaturePlot(training_data_so_final, features = gene) + NoAxes()
+  
+  ggsave(paste(sub_plot_name, "svg", sep = "."), device = "svg", bg = "white", limitsize = FALSE, width = 7, height = 7)
+  ggsave(paste(sub_plot_name, "png", sep = "."), device = "png", bg = "white", limitsize = FALSE, width = 7, height = 7, dpi = 320)
+}
+
+rm(cell_type_markers, gene, sub_plot_name)
+```
+
+
+### Fig 1g - UMAP with Annotation
+```{r}
+plot_name <- paste(dir_list$plots, "Fig_1g", sep = "/")
+
+DimPlot(training_data_so_final, reduction = "umap_harmony", label = T, label.size = 3, repel = T) + NoAxes() + NoLegend()
+
+ggsave(paste(plot_name, "svg", sep = "."), device = "svg", bg = "white", limitsize = FALSE, width = 7, height = 7)
+ggsave(paste(plot_name, "png", sep = "."), device = "png", bg = "white", limitsize = FALSE, width = 7, height = 7, dpi = 320)
+```
+
+### Fig 1h - Proportion of Cells of Each Cell Type per Sample
+```{r}
+plot_name <- paste(dir_list$plots, "Fig_1h", sep = "/")
+
+cell_type_levels_alt <- training_data_so_final@meta.data %>% 
+  select(cell_type) %>% 
+  summarise(cell_count = n(), .by = c("cell_type")) %>% 
+  arrange(desc(cell_count)) %>% 
+  pull("cell_type") %>% 
+  unique()
+
+training_data_so_final@meta.data %>% 
+    select(cell_type, orig.ident) %>%
+    summarise(cell_count = n(), .by = c("orig.ident", "cell_type")) %>% 
+    mutate(prop = cell_count/sum(cell_count),
+           cell_type = factor(cell_type, levels = cell_type_levels_alt)) %>% 
+  	ggplot(aes(x=orig.ident, fill=cell_type, y=prop)) +
+  	geom_bar(position = "fill", stat = "identity") +
+  	theme_classic() +
+    labs(y = "Proportion", fill = "Cell Type") +
+    scale_y_continuous(labels = scales::percent_format()) +
+  	theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust=1, size = 8),
+  	      axis.title.x = element_blank())
+
+ggsave(paste(plot_name, "svg", sep = "."), device = "svg", bg = "white", limitsize = FALSE, width = 7, height = 5)
+ggsave(paste(plot_name, "png", sep = "."), device = "png", bg = "white", limitsize = FALSE, width = 7, height = 5, dpi = 320)
+
+rm(cell_type_levels_alt)
+gc()
+```
+
+### Fig 1i - Number of Cells Per Type
+```{r}
+plot_name <- paste(dir_list$plots, "Fig_1i", sep = "/")
+
+training_data_so_final@meta.data %>% 
+    select(cell_type) %>% 
+  	ggplot(aes(x=forcats::fct_infreq(cell_type), fill=cell_type)) +
+  	geom_bar() +
+    geom_text(stat = "count", aes(label=after_stat(count)), vjust = 0) +
+  	theme_classic() +
+    labs(y = "Cell Count") +
+  	theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust=1, size = 8),
+  	      axis.title.x = element_blank()) +
+  	theme(plot.title = element_text(hjust=0.5, face="bold")) +
+    NoLegend()
+
+ggsave(paste(plot_name, "svg", sep = "."), device = "svg", bg = "white", limitsize = FALSE, width = 7, height = 5)
+ggsave(paste(plot_name, "png", sep = "."), device = "png", bg = "white", limitsize = FALSE, width = 7, height = 5, dpi = 320)
+```
+
+### Fig 1j - Proportion of Cells of Each Age Group per Cell Type
+```{r}
+plot_name <- paste(dir_list$plots, "Fig_1j", sep = "/")
+
+training_data_so_final@meta.data %>% 
+    select(cell_type, age_group) %>%
+    summarise(cell_count = n(), .by = c("age_group", "cell_type")) %>% 
+    mutate(prop = cell_count/sum(cell_count)) %>% 
+  	ggplot(aes(x=cell_type, fill=age_group, y=prop)) +
+  	geom_bar(position = "fill", stat = "identity") +
+  	theme_classic() +
+    labs(y = "Proportion", fill = "Age Group") +
+  scale_y_continuous(labels = scales::percent_format()) +
+  	theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust=1, size = 8),
+  	      axis.title.x = element_blank())
+
+ggsave(paste(plot_name, "svg", sep = "."), device = "svg", bg = "white", limitsize = FALSE, width = 7, height = 5)
+ggsave(paste(plot_name, "png", sep = "."), device = "png", bg = "white", limitsize = FALSE, width = 7, height = 5, dpi = 320)
+```
+
+## Supp Fig 1
+### Supp Fig 1a - UMIs per Nucleus
+```{r}
+plot_name <- paste(dir_list$plots, "Supp_Fig_1a", sep = "/")
+
+training_data_so_qc@meta.data %>% 
+  select(orig.ident, nCount_RNA, age_group) %>% 
+  ggplot(aes(x = orig.ident, y = log10(nCount_RNA), fill = age_group)) +
+  geom_violin(scale = "width") +
+  geom_hline(yintercept = c(log10(1200), log10(100000)), linetype = "dashed", color = c("red", "red")) +
+  theme_classic() +
+  theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust=1, size = 8),
+        axis.title.x = element_blank()) +
+  labs(y = "log10(UMIs/Nucleus)", fill = "Age Group")
+
+ggsave(paste(plot_name, "svg", sep = "."), device = "svg", bg = "white", limitsize = FALSE, width = 9, height = 5)
+ggsave(paste(plot_name, "png", sep = "."), device = "png", bg = "white", limitsize = FALSE, width = 9, height = 5, dpi = 320)
+```
+
+### Supp Fig 1b - Genes per Nucleus
+```{r}
+plot_name <- paste(dir_list$plots, "Supp_Fig_1b", sep = "/")
+
+training_data_so_qc@meta.data %>% 
+  select(orig.ident, nFeature_RNA, age_group) %>% 
+  ggplot(aes(x = orig.ident, y = nFeature_RNA, fill = age_group)) +
+  geom_violin(scale = "width") +
+  geom_hline(yintercept = c(800,12000), linetype = "dashed", color = c("red", "red")) +
+  theme_classic() +
+  theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust=1, size = 8),
+        axis.title.x = element_blank()) +
+  labs(y = "Genes/Nucleus", fill = "Age Group")
+
+ggsave(paste(plot_name, "svg", sep = "."), device = "svg", bg = "white", limitsize = FALSE, width = 9, height = 5)
+ggsave(paste(plot_name, "png", sep = "."), device = "png", bg = "white", limitsize = FALSE, width = 9, height = 5, dpi = 320)
+```
+
+### Supp Fig 1c - %Mt Genes per Nucleus
+```{r}
+plot_name <- paste(dir_list$plots, "Supp_Fig_1c", sep = "/")
+
+training_data_so_qc@meta.data %>% 
+  select(orig.ident, percent.mt, age_group) %>% 
+  ggplot(aes(x = orig.ident, y = percent.mt, fill = age_group)) +
+  geom_violin(scale = "width") +
+  geom_hline(yintercept = 5, linetype = "dashed", color = "red") +
+  theme_classic() +
+  theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust=1, size = 8),
+        axis.title.x = element_blank()) +
+  labs(y = "% Mitochondrial Genes", fill = "Age Group")
+
+ggsave(paste(plot_name, "svg", sep = "."), device = "svg", bg = "white", limitsize = FALSE, width = 9, height = 5)
+ggsave(paste(plot_name, "png", sep = "."), device = "png", bg = "white", limitsize = FALSE, width = 9, height = 5, dpi = 320)
+```
+
+### Supp Fig 1d - Cell Count Per Sample at each stage
+```{r}
+plot_name <- paste(dir_list$plots, "Supp_Fig_1d", sep = "/")
+
+cell_count_table <- training_data_so_qc@meta.data %>% 
+  select(orig.ident) %>% 
+  summarise("Nuclei Recovered" = n(), .by = c("orig.ident"))
+
+cell_count_table <- training_data_so_final@meta.data %>% 
+  select(orig.ident) %>% 
+  summarise("Nuclei After Quality Control" = n(), .by = c("orig.ident")) %>% 
+  inner_join(cell_count_table, by = "orig.ident")
+
+cell_count_table %>% 
+  mutate(`Nuclei Recovered` = (`Nuclei Recovered` - `Nuclei After Quality Control`)) %>% 
+  pivot_longer(cols = starts_with("Nuclei"), names_to = "Stage", values_to = "Nuclei Count") %>% 
+  mutate(orig.ident = factor(orig.ident, levels = sample_ids),
+         Stage = factor(Stage, levels = c("Nuclei Recovered", "Nuclei After Quality Control"))) %>% 
+  ggplot(aes(x=orig.ident, fill=Stage, y=`Nuclei Count`)) +
+  	geom_bar(position = "stack", stat = "identity") +
+  	theme_classic() +
+    labs(y = "Nuclei Count", fill = "Stage") +
+  	theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust=1, size = 12),
+  	      axis.title.x = element_blank())
+
+ggsave(paste(plot_name, "svg", sep = "."), device = "svg", bg = "white", limitsize = FALSE, width = 9, height = 5)
+ggsave(paste(plot_name, "png", sep = "."), device = "png", bg = "white", limitsize = FALSE, width = 9, height = 5, dpi = 320)
+```
+
+### Supp Fig 1e - Additional Cell Type Markers
+```{r}
+plot_name <- paste(dir_list$plots, "Supp_Fig_1e", sep = "/")
+
+cell_type_markers_extra <- c("MOG", "MAG", "C3", "CSF1R", "GJA1", "GFAP", "COL9A1", "VCAN", "SLC17A7", "NRGN", "GAD2", "SYNPR", "VIM", "FLT1", "COL6A1", "DCN", "CD96", "CD247")
+
+scCustomize::Stacked_VlnPlot(training_data_so_final, features = cell_type_markers_extra, x_lab_rotate = TRUE)
+
+ggsave(paste(plot_name, "svg", sep = "."), device = "svg", bg = "white", limitsize = FALSE, width = 9, height = 12)
+ggsave(paste(plot_name, "png", sep = "."), device = "png", bg = "white", limitsize = FALSE, width = 9, height = 12, dpi = 320)
+
+rm(cell_type_markers_extra)
+```
+
+### Supp Fig 1f - Proportion of Cells of Each Cell Type per Sample
+```{r}
+plot_name <- paste(dir_list$plots, "Supp_Fig_1f", sep = "/")
+
+training_data_so_final@meta.data %>% 
+  group_by(cell_type, orig.ident) %>%
+  summarise(cell_count = n(), .groups = "drop") %>% 
+  group_by(cell_type) %>% 
+  mutate(perct = (cell_count/sum(cell_count)) * 100) %>% 
+  ggplot(aes(x = cell_type, y = orig.ident, fill = perct)) +
+    geom_tile(color = 'white') +
+    geom_text(aes(label = round(perct, digits = 2)), size = 2.5) +
+    scale_x_discrete(name = "cell_type", position = 'bottom') +
+    scale_y_discrete(name = "orig.ident") +
+    scale_fill_gradient(low = 'white', high = '#c0392b', na.value = '#bdc3c7', guide = guide_colorbar( frame.colour = 'black', ticks.colour = 'black', title.position = 'left', title.theme = element_text(hjust = 1, angle = 90), barwidth = 0.75, barheight = 10)) +
+    theme_bw() +
+    theme(legend.position = 'right', panel.grid.major = element_blank(), axis.text.x = element_text(angle = 45, hjust = 1), axis.title.x = element_blank())
+
+ggsave(paste(plot_name, "svg", sep = "."), device = "svg", bg = "white", limitsize = FALSE, width = 7, height = 7)
+ggsave(paste(plot_name, "png", sep = "."), device = "png", bg = "white", limitsize = FALSE, width = 7, height = 7, dpi = 320)
+```
+
+### Supp Fig 1g - Distribution of Sequencing Batch in cluster
+```{r}
+plot_name <- paste(dir_list$plots, "Supp_Fig_1g", sep = "/")
+
+DimPlot(training_data_so_final, reduction = "umap_harmony", group.by = "sequencing_batch", label = FALSE, label.size = 3, repel = T) + NoAxes() + ggtitle(NULL)
+
+ggsave(paste(plot_name, "svg", sep = "."), device = "svg", bg = "white", limitsize = FALSE, width = 7, height = 7)
+ggsave(paste(plot_name, "png", sep = "."), device = "png", bg = "white", limitsize = FALSE, width = 7, height = 7, dpi = 320)
+```
+
+### Supp Fig 1h - Distribution of Sex in clusters
+```{r}
+plot_name <- paste(dir_list$plots, "Supp_Fig_1h", sep = "/")
+
+DimPlot(training_data_so_final, reduction = "umap_harmony", group.by = "sex", label = FALSE, label.size = 3, repel = T) + NoAxes() + ggtitle(NULL)
+
+ggsave(paste(plot_name, "svg", sep = "."), device = "svg", bg = "white", limitsize = FALSE, width = 7, height = 7)
+ggsave(paste(plot_name, "png", sep = "."), device = "png", bg = "white", limitsize = FALSE, width = 7, height = 7, dpi = 320)
+```
+
+### Supp Fig 1i - UMAP with predicted doublets
+```{r}
+plot_name <- paste(dir_list$plots, "Supp_Fig_1i", sep = "/")
+
+DimPlot(training_data_so_doublets, group.by = "scDblFinder.class", reduction = "UMAP_HARMONY", label = FALSE, label.size = 3, repel = T) + NoAxes() + ggtitle(NULL)
+
+ggsave(paste(plot_name, "svg", sep = "."), device = "svg", bg = "white", limitsize = FALSE, width = 7, height = 7)
+ggsave(paste(plot_name, "png", sep = "."), device = "png", bg = "white", limitsize = FALSE, width = 7, height = 7, dpi = 320)
+```
+
+
+## Fig 2
+
+```{r}
+microglia_so <- subset(training_data_so_final_scaled, ident = "Microglia")
+```
+
+### Fig 2a - Heatmap of top differentially genes in Microglia Old vs Young
+```{r}
+plot_name <- paste(dir_list$plots, "Fig_2a", sep = "/")
+
+genes <- deg_filt_list$`Old vs Young`$Microglia %>% filter(abs(avg_log2FC) > 0.75) %>% arrange(avg_log2FC)
+
+exp_mat <- DoHeatmap(microglia_so, features = rownames(genes), group.by = "age_group", group.bar = TRUE)$data
+
+exp_data <- exp_mat %>% 
+  pivot_wider(id_cols = "Feature", names_from = "Cell", values_from = "Expression") %>% 
+  column_to_rownames("Feature")
+
+col_ann <- microglia_so@meta.data %>% 
+  dplyr::select(orig.ident, age_group, age) %>% 
+  mutate(orig.ident = factor(orig.ident, levels = sample_ids),
+         age_group = factor(age_group, levels = age_group_levels)) %>% 
+  arrange(age) %>% 
+  rename("Sample" = orig.ident, "Age Group" = age_group, "Age" = age)
+
+svglite::svglite(filename = paste0(plot_name, ".svg"), width = 10, height = 19)
+
+pheatmap::pheatmap(exp_data[, rownames(col_ann)], scale = "row", cluster_rows = FALSE, cluster_cols = FALSE, annotation_col = col_ann, show_rownames = TRUE, show_colnames = FALSE, color = colorRampPalette(c("blue", "white", "red"))(100), gaps_col = c(which(!duplicated(col_ann[["Age Group"]]))[-1]-1))
+
+dev.off()
+
+pheatmap::pheatmap(exp_data[, rownames(col_ann)], scale = "row", cluster_rows = FALSE, cluster_cols = FALSE, annotation_col = col_ann, show_rownames = TRUE, show_colnames = FALSE, color = colorRampPalette(c("blue", "white", "red"))(100), gaps_col = c(which(!duplicated(col_ann[["Age Group"]]))[-1]-1), height = 19, width = 10, filename = paste0(plot_name, ".png"))
+```
+
+### Fig 2b - Violin plot of example genes differentially expressed in Microglia Old vs Young
+```{r}
+plot_name <- paste(dir_list$plots, "Fig_2b", sep = "/")
+
+genes <- c("FOXP1", "TLR2", "CD163", "CX3CR1", "P2RY12", "P2RY13")
+
+VlnPlot(microglia_so, features = genes, group.by = "age_group", pt.size = 0.1) &
+  theme(axis.title = element_blank())
+
+ggsave(paste(plot_name, "svg", sep = "."), device = "svg", bg = "white", limitsize = FALSE, width = 7, height = 7)
+ggsave(paste(plot_name, "png", sep = "."), device = "png", bg = "white", limitsize = FALSE, width = 7, height = 7, dpi = 320)
+```
+
+### Fig 2c - Gene ontology plot in Microglia Old vs Young
+```{r}
+plot_name <- paste(dir_list$plots, "Fig_2c", sep = "/")
+
+terms <- c("GO:0070997", "GO:0043254", "GO:0051402", "GO:0061077", "GO:0042116", "GO:1901214", "GO:0050727", "GO:0032103", "GO:0002253", "GO:0060759")
+
+description <- go_ora_list$`Old vs Young`$Microglia@result %>% filter(ID %in% terms) %>% pull("Description")
+
+clusterProfiler::dotplot(go_ora_list$`Old vs Young`$Microglia, showCategory = description) +
+  theme(panel.grid = element_blank()) +
+  scale_color_gradient(low = "firebrick1", high = "gray94")
+
+ggsave(paste(plot_name, "svg", sep = "."), device = "svg", bg = "white", limitsize = FALSE, width = 7, height = 5)
+ggsave(paste(plot_name, "png", sep = "."), device = "png", bg = "white", limitsize = FALSE, width = 7, height = 5, dpi = 320)
+```
+
+```{r}
+astrocytes_so <- subset(training_data_so_final_scaled, ident = "Astrocytes")
+```
+
+### Fig 2d - Heatmap of top differentially genes in Astrocytes Old vs Young
+```{r}
+plot_name <- paste(dir_list$plots, "Fig_2d", sep = "/")
+
+genes <- deg_filt_list$`Old vs Young`$Astrocytes %>% filter(abs(avg_log2FC) > 0.75) %>% arrange(avg_log2FC)
+
+exp_mat <- DoHeatmap(astrocytes_so, features = rownames(genes), group.by = "age_group", group.bar = TRUE)$data
+
+exp_data <- exp_mat %>% 
+  pivot_wider(id_cols = "Feature", names_from = "Cell", values_from = "Expression") %>% 
+  column_to_rownames("Feature")
+
+col_ann <- astrocytes_so@meta.data %>% 
+  dplyr::select(orig.ident, age_group, age) %>% 
+  mutate(orig.ident = factor(orig.ident, levels = sample_ids),
+         age_group = factor(age_group, levels = age_group_levels)) %>% 
+  arrange(age) %>% 
+  rename("Sample" = orig.ident, "Age Group" = age_group, "Age" = age)
+
+svglite::svglite(filename = paste0(plot_name, ".svg"), width = 10, height = 19)
+
+pheatmap::pheatmap(exp_data[, rownames(col_ann)], scale = "row", cluster_rows = FALSE, cluster_cols = FALSE, annotation_col = col_ann, show_rownames = TRUE, show_colnames = FALSE, color = colorRampPalette(c("blue", "white", "red"))(100), gaps_col = c(which(!duplicated(col_ann[["Age Group"]]))[-1]-1))
+
+dev.off()
+
+pheatmap::pheatmap(exp_data[, rownames(col_ann)], scale = "row", cluster_rows = FALSE, cluster_cols = FALSE, annotation_col = col_ann, show_rownames = TRUE, show_colnames = FALSE, color = colorRampPalette(c("blue", "white", "red"))(100), gaps_col = c(which(!duplicated(col_ann[["Age Group"]]))[-1]-1), height = 19, width = 10, filename = paste0(plot_name, ".png"))
+```
+
+### Fig 2e - Violin plot of example genes differentially expressed in Astrocytes Old vs Young
+```{r}
+plot_name <- paste(dir_list$plots, "Fig_2e", sep = "/")
+
+genes <- c("TPST1", "SAMD4A", "CNN3", "STAT3", "SORBS1")
+
+VlnPlot(astrocytes_so, features = genes, group.by = "age_group", pt.size = 0.1) &
+  theme(axis.title = element_blank())
+
+ggsave(paste(plot_name, "svg", sep = "."), device = "svg", bg = "white", limitsize = FALSE, width = 7, height = 7)
+ggsave(paste(plot_name, "png", sep = "."), device = "png", bg = "white", limitsize = FALSE, width = 7, height = 7, dpi = 320)
+```
+
+### Fig 2f - Gene ontology plot in Microglia Old vs Young
+```{r}
+plot_name <- paste(dir_list$plots, "Fig_2f", sep = "/")
+
+terms <- c("GO:0006457", "GO:0061077", "GO:0006986", "GO:0010001", "GO:0048024", "GO:0007272", "GO:0006458", "GO:0042063", "GO:0035967")
+
+description <- go_ora_list$`Old vs Young`$Astrocytes@result %>% filter(ID %in% terms) %>% pull("Description")
+
+clusterProfiler::dotplot(go_ora_list$`Old vs Young`$Astrocytes, showCategory = description) +
+  theme(panel.grid = element_blank()) +
+  scale_color_gradient(low = "firebrick1", high = "gray94")
+
+ggsave(paste(plot_name, "svg", sep = "."), device = "svg", bg = "white", limitsize = FALSE, width = 7, height = 5)
+ggsave(paste(plot_name, "png", sep = "."), device = "png", bg = "white", limitsize = FALSE, width = 7, height = 5, dpi = 320)
+```
+
+## Supp Fig 2
+
+```{r}
+oligodendrocyte_so <- subset(training_data_so_final_scaled, ident = "Oligodendrocytes")
+```
+
+### Supp Fig 2a - Heatmap of top differentially genes in Oligodendrocytes Old vs Young
+```{r}
+plot_name <- paste(dir_list$plots, "Supp_Fig_2a", sep = "/")
+
+genes <- deg_filt_list$`Old vs Young`$Oligodendrocytes %>% filter(abs(avg_log2FC) > 0.5) %>% arrange(avg_log2FC)
+
+exp_mat <- DoHeatmap(oligodendrocyte_so, features = rownames(genes), group.by = "age_group", group.bar = TRUE)$data
+
+exp_data <- exp_mat %>% 
+  pivot_wider(id_cols = "Feature", names_from = "Cell", values_from = "Expression") %>% 
+  column_to_rownames("Feature")
+
+col_ann <- oligodendrocyte_so@meta.data %>% 
+  dplyr::select(orig.ident, age_group, age) %>% 
+  mutate(orig.ident = factor(orig.ident, levels = sample_ids),
+         age_group = factor(age_group, levels = age_group_levels)) %>% 
+  arrange(age) %>% 
+  rename("Sample" = orig.ident, "Age Group" = age_group, "Age" = age)
+
+svglite::svglite(filename = paste0(plot_name, ".svg"), width = 10, height = 19)
+
+pheatmap::pheatmap(exp_data[, rownames(col_ann)], scale = "row", cluster_rows = FALSE, cluster_cols = FALSE, annotation_col = col_ann, show_rownames = TRUE, show_colnames = FALSE, color = colorRampPalette(c("blue", "white", "red"))(100), gaps_col = c(which(!duplicated(col_ann[["Age Group"]]))[-1]-1))
+
+dev.off()
+
+pheatmap::pheatmap(exp_data[, rownames(col_ann)], scale = "row", cluster_rows = FALSE, cluster_cols = FALSE, annotation_col = col_ann, show_rownames = TRUE, show_colnames = FALSE, color = colorRampPalette(c("blue", "white", "red"))(100), gaps_col = c(which(!duplicated(col_ann[["Age Group"]]))[-1]-1), height = 19, width = 10, filename = paste0(plot_name, ".png"))
+```
+
+### Supp Fig 2b - Gene ontology plot in Oligodendrocytes Old vs Young
+```{r}
+plot_name <- paste(dir_list$plots, "Supp_Fig_2b", sep = "/")
+
+description <- go_ora_list$`Old vs Young`$Oligodendrocytes@result %>% pull("Description")
+
+clusterProfiler::dotplot(go_ora_list$`Old vs Young`$Oligodendrocytes, showCategory = description) +
+  theme(panel.grid = element_blank()) +
+  scale_color_gradient(low = "firebrick1", high = "gray94")
+
+ggsave(paste(plot_name, "svg", sep = "."), device = "svg", bg = "white", limitsize = FALSE, width = 7, height = 5)
+ggsave(paste(plot_name, "png", sep = "."), device = "png", bg = "white", limitsize = FALSE, width = 7, height = 5, dpi = 320)
+```
+
+```{r}
+opc_so <- subset(training_data_so_final_scaled, ident = "OPCs")
+```
+
+### Supp Fig 2c - Heatmap of top differentially genes in OPCs Old vs Young
+```{r}
+plot_name <- paste(dir_list$plots, "Supp_Fig_2c", sep = "/")
+
+genes <- deg_filt_list$`Old vs Young`$OPCs %>% filter(abs(avg_log2FC) > 0.5) %>% arrange(avg_log2FC)
+
+exp_mat <- DoHeatmap(opc_so, features = rownames(genes), group.by = "age_group", group.bar = TRUE)$data
+
+exp_data <- exp_mat %>% 
+  pivot_wider(id_cols = "Feature", names_from = "Cell", values_from = "Expression") %>% 
+  column_to_rownames("Feature")
+
+col_ann <- opc_so@meta.data %>% 
+  dplyr::select(orig.ident, age_group, age) %>% 
+  mutate(orig.ident = factor(orig.ident, levels = sample_ids),
+         age_group = factor(age_group, levels = age_group_levels)) %>% 
+  arrange(age) %>% 
+  rename("Sample" = orig.ident, "Age Group" = age_group, "Age" = age)
+
+svglite::svglite(filename = paste0(plot_name, ".svg"), width = 10, height = 19)
+
+pheatmap::pheatmap(exp_data[, rownames(col_ann)], scale = "row", cluster_rows = FALSE, cluster_cols = FALSE, annotation_col = col_ann, show_rownames = TRUE, show_colnames = FALSE, color = colorRampPalette(c("blue", "white", "red"))(100), gaps_col = c(which(!duplicated(col_ann[["Age Group"]]))[-1]-1))
+
+dev.off()
+
+pheatmap::pheatmap(exp_data[, rownames(col_ann)], scale = "row", cluster_rows = FALSE, cluster_cols = FALSE, annotation_col = col_ann, show_rownames = TRUE, show_colnames = FALSE, color = colorRampPalette(c("blue", "white", "red"))(100), gaps_col = c(which(!duplicated(col_ann[["Age Group"]]))[-1]-1), height = 19, width = 10, filename = paste0(plot_name, ".png"))
+```
+
+```{r}
+exc_neu_so <- subset(training_data_so_final_scaled, ident = "Excitatory Neurons")
+```
+
+### Supp Fig 2d - Heatmap of top differentially genes in Excitatory Neurons Old vs Young
+```{r}
+plot_name <- paste(dir_list$plots, "Supp_Fig_2d", sep = "/")
+
+genes <- deg_filt_list$`Old vs Young`$`Excitatory Neurons` %>% filter(abs(avg_log2FC) > 0.5) %>% arrange(avg_log2FC)
+
+exp_mat <- DoHeatmap(exc_neu_so, features = rownames(genes), group.by = "age_group", group.bar = TRUE)$data
+
+exp_data <- exp_mat %>% 
+  pivot_wider(id_cols = "Feature", names_from = "Cell", values_from = "Expression") %>% 
+  column_to_rownames("Feature")
+
+col_ann <- exc_neu_so@meta.data %>% 
+  dplyr::select(orig.ident, age_group, age) %>% 
+  mutate(orig.ident = factor(orig.ident, levels = sample_ids),
+         age_group = factor(age_group, levels = age_group_levels)) %>% 
+  arrange(age) %>% 
+  rename("Sample" = orig.ident, "Age Group" = age_group, "Age" = age)
+
+svglite::svglite(filename = paste0(plot_name, ".svg"), width = 10, height = 19)
+
+pheatmap::pheatmap(exp_data[, rownames(col_ann)], scale = "row", cluster_rows = FALSE, cluster_cols = FALSE, annotation_col = col_ann, show_rownames = TRUE, show_colnames = FALSE, color = colorRampPalette(c("blue", "white", "red"))(100), gaps_col = c(which(!duplicated(col_ann[["Age Group"]]))[-1]-1))
+
+dev.off()
+
+pheatmap::pheatmap(exp_data[, rownames(col_ann)], scale = "row", cluster_rows = FALSE, cluster_cols = FALSE, annotation_col = col_ann, show_rownames = TRUE, show_colnames = FALSE, color = colorRampPalette(c("blue", "white", "red"))(100), gaps_col = c(which(!duplicated(col_ann[["Age Group"]]))[-1]-1), height = 19, width = 10, filename = paste0(plot_name, ".png"))
+```
+
+### Supp Fig 2e - Gene ontology plot in Excitatory Neurons Old vs Young
+```{r}
+plot_name <- paste(dir_list$plots, "Supp_Fig_2e", sep = "/")
+
+description <- go_ora_list$`Old vs Young`$`Excitatory Neurons`@result %>% pull("Description")
+
+clusterProfiler::dotplot(go_ora_list$`Old vs Young`$`Excitatory Neurons`, showCategory = description) +
+  theme(panel.grid = element_blank()) +
+  scale_color_gradient(low = "firebrick1", high = "gray94")
+
+ggsave(paste(plot_name, "svg", sep = "."), device = "svg", bg = "white", limitsize = FALSE, width = 7, height = 5)
+ggsave(paste(plot_name, "png", sep = "."), device = "png", bg = "white", limitsize = FALSE, width = 7, height = 5, dpi = 320)
+```
+
+```{r}
+inh_neu_so <- subset(training_data_so_final_scaled, ident = "Inhibitory Neurons")
+```
+
+### Supp Fig 2f - Heatmap of top differentially genes in Inhibitory Neurons Old vs Young
+```{r}
+plot_name <- paste(dir_list$plots, "Supp_Fig_2f", sep = "/")
+
+genes <- deg_filt_list$`Old vs Young`$`Inhibitory Neurons` %>% filter(abs(avg_log2FC) > 0.5) %>% arrange(avg_log2FC)
+
+exp_mat <- DoHeatmap(inh_neu_so, features = rownames(genes), group.by = "age_group", group.bar = TRUE)$data
+
+exp_data <- exp_mat %>% 
+  pivot_wider(id_cols = "Feature", names_from = "Cell", values_from = "Expression") %>% 
+  column_to_rownames("Feature")
+
+col_ann <- inh_neu_so@meta.data %>% 
+  dplyr::select(orig.ident, age_group, age) %>% 
+  mutate(orig.ident = factor(orig.ident, levels = sample_ids),
+         age_group = factor(age_group, levels = age_group_levels)) %>% 
+  arrange(age) %>% 
+  rename("Sample" = orig.ident, "Age Group" = age_group, "Age" = age)
+
+svglite::svglite(filename = paste0(plot_name, ".svg"), width = 10, height = 19)
+
+pheatmap::pheatmap(exp_data[, rownames(col_ann)], scale = "row", cluster_rows = FALSE, cluster_cols = FALSE, annotation_col = col_ann, show_rownames = TRUE, show_colnames = FALSE, color = colorRampPalette(c("blue", "white", "red"))(100), gaps_col = c(which(!duplicated(col_ann[["Age Group"]]))[-1]-1))
+
+dev.off()
+
+pheatmap::pheatmap(exp_data[, rownames(col_ann)], scale = "row", cluster_rows = FALSE, cluster_cols = FALSE, annotation_col = col_ann, show_rownames = TRUE, show_colnames = FALSE, color = colorRampPalette(c("blue", "white", "red"))(100), gaps_col = c(which(!duplicated(col_ann[["Age Group"]]))[-1]-1), height = 19, width = 10, filename = paste0(plot_name, ".png"))
+```
+
+## Supp Fig 4
+### Reference UMAP - Training dataset - Supp Fig 4a and 4b (left)
+```{r}
+plot_name <- paste(dir_list$plots, "Supp_Fig4_Ref_UMAP", sep = "/")
+
+DimPlot(training_data_so_final_major_types, reduction = "umap", group.by = "cell_type", label = T, label.size = 3, repel = T, raster = FALSE) + NoAxes() + NoLegend() + labs(title = NULL)
+
+ggsave(paste(plot_name, "svg", sep = "."), device = "svg", bg = "white", limitsize = FALSE, width = 7, height = 7)
+ggsave(paste(plot_name, "png", sep = "."), device = "png", bg = "white", limitsize = FALSE, width = 7, height = 7, dpi = 320)
+```
+
+### Supp Fig 4a - Frohlich Query UMAP (right)
+```{r}
+plot_name <- paste(dir_list$plots, "Supp_Fig4a_Query_UMAP", sep = "/")
+
+DimPlot(frohlich_data_so_major_types_umap_proj, group.by = "major_celltypes_relabel", reduction = "ref.umap", label = T, label.size = 3, repel = T, raster = FALSE) + NoAxes() + NoLegend() + labs(title = NULL)
+
+ggsave(paste(plot_name, "svg", sep = "."), device = "svg", bg = "white", limitsize = FALSE, width = 7, height = 7)
+ggsave(paste(plot_name, "png", sep = "."), device = "png", bg = "white", limitsize = FALSE, width = 7, height = 7, dpi = 320)
+```
+
+### Supp Fig 4b - Velmeshev Query UMAP (right)
+```{r}
+plot_name <- paste(dir_list$plots, "Supp_Fig4b_Query_UMAP", sep = "/")
+
+DimPlot(velmeshev_data_so_major_types_umap_proj, group.by = "cell_type", reduction = "ref.umap", label = T, label.size = 3, repel = T, raster = FALSE) + NoAxes() + NoLegend() + labs(title = NULL)
+
+ggsave(paste(plot_name, "svg", sep = "."), device = "svg", bg = "white", limitsize = FALSE, width = 7, height = 7)
+ggsave(paste(plot_name, "png", sep = "."), device = "png", bg = "white", limitsize = FALSE, width = 7, height = 7, dpi = 320)
+```
+
+
+### Supp Fig 4c - DotPlot with Prediction scores in Frohlich dataset
+```{r}
+plot_name <- paste(dir_list$plots, "Supp_Fig4c", sep = "/")
+
+frohlich_data_so_major_types_umap_proj@meta.data %>% 
+  select(starts_with("prediction.score."), major_celltypes_relabel) %>% 
+  select(!prediction.score.max) %>% 
+  pivot_longer(cols = starts_with("prediction.score"), names_to = "Prediction", names_pattern = "prediction\\.score\\.(.*)", names_transform = list(Prediction = ~gsub("\\.", " ", .x)), values_to = "predicted_score") %>% 
+  group_by(Prediction, major_celltypes_relabel) %>% 
+  summarise(avg_score = mean(predicted_score)) %>%
+  mutate(Prediction = factor(Prediction, levels = cell_type_levels)) %>% 
+  ggplot(aes(x = Prediction, y = major_celltypes_relabel)) +
+  geom_point(aes(size = avg_score, colour = Prediction)) +
+  labs(x = "Predicted Annotation",
+       y = "Original Annotation",
+       size = "Mean Prediction Score",
+       colour = "Prediction") +
+  theme_classic() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+ggsave(paste(plot_name, "svg", sep = "."), device = "svg", bg = "white", limitsize = FALSE, width = 7, height = 7)
+ggsave(paste(plot_name, "png", sep = "."), device = "png", bg = "white", limitsize = FALSE, width = 7, height = 7, dpi = 320)
+```
+
+### Supp Fig 4d - DotPlot with Prediction scores in Velmeshev dataset
+```{r}
+plot_name <- paste(dir_list$plots, "Supp_Fig4d", sep = "/")
+
+velmeshev_data_so_major_types_umap_proj@meta.data %>% 
+  select(starts_with("prediction.score."), cell_type) %>% 
+  select(!prediction.score.max) %>% 
+  pivot_longer(cols = starts_with("prediction.score"), names_to = "Prediction", names_pattern = "prediction\\.score\\.(.*)", names_transform = list(Prediction = ~gsub("\\.", " ", .x)), values_to = "predicted_score") %>% 
+  group_by(Prediction, cell_type) %>% 
+  summarise(avg_score = mean(predicted_score)) %>%
+  mutate(Prediction = factor(Prediction, levels = cell_type_levels)) %>% 
+  ggplot(aes(x = Prediction, y = cell_type)) +
+  geom_point(aes(size = avg_score, colour = Prediction)) +
+  labs(x = "Predicted Annotation",
+       y = "Original Annotation",
+       size = "Mean Prediction Score",
+       colour = "Prediction") +
+  theme_classic() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+ggsave(paste(plot_name, "svg", sep = "."), device = "svg", bg = "white", limitsize = FALSE, width = 7, height = 7)
+ggsave(paste(plot_name, "png", sep = "."), device = "png", bg = "white", limitsize = FALSE, width = 7, height = 7, dpi = 320)
+```
+
+
+# Tables
+## Supp Data 1c - Number of cells per type per sample
+```{r}
+frohlich_data_so_major_types_umap_proj@meta.data %>% 
+  select(major_celltypes_relabel, predicted.id) %>% 
+  mutate(predicted.id = factor(predicted.id, levels = cell_type_levels)) %>% 
+  group_by(major_celltypes_relabel, predicted.id) %>%
+  summarise(n = n()) %>% 
+  pivot_wider(names_from = major_celltypes_relabel, values_from = n) %>% 
+  data.table::fwrite(file = paste(dir_list$docs, "Supplementary_Data_8b.csv", sep = "/"))
+```
+
+## Supp Data 2 - All Markers in each cell type in the training dataset
+```{r}
+training_data_all_markers %>% 
+  rename("cell_type" = "cluster") %>% 
+  mutate(cell_type = factor(cell_type, levels = cell_type_levels)) %>% 
+  select(cell_type, gene, avg_log2FC, pct.1, pct.2, p_val, p_val_adj) %>% 
+  data.table::fwrite(file = paste(dir_list$docs, "Supplementary_Data_2.csv", sep = "/"))
+```
+
+## Pre-requisite for Supp Data 3 and 4
+```{r}
+cell_types <- c("Oligodendrocytes", "Microglia", "Astrocytes", "OPCs", "Excitatory Neurons", "Inhibitory Neurons")
+comp_order <- c("Old vs Young", "Old vs Middle Age", "Middle Age vs Young")
+```
+
+## Supp Data 3 - Differential Expression Analysis results
+```{r}
+# Generate file labels: 26 (a-z) then aa-aj for 36 files total
+file_labels <- c(letters, paste0("a", letters[1:10]))  # "a" ... "z", then "aa", "ab", ..., "aj"
+counter <- 1
+
+wb <- openxlsx::createWorkbook()
+
+# Looping over each cell type first
+for(cell in cell_types) {
+  # Iterating through the differential comparisons
+  for(comp in comp_order) {
+    # Extracting the data frame for this cell type in this comparison
+    df <- deg_list[[comp]][[cell]] %>% rownames_to_column(var = "gene")
+    # Constructing the filename using the current file label
+    sheet_name <- paste0("Supplementary_Data_3", file_labels[counter])
+    
+    openxlsx::addWorksheet(wb, sheet_name)
+    openxlsx::writeData(wb, sheet_name, paste("Results from differential expression analysis of", cell, "in", comp, "comparison", sep = " "), startRow = 1, colNames = FALSE)
+    openxlsx::writeData(wb, sheet_name, df, startRow = 2)
+    counter <- counter + 1
+  }
+  # Iterating through the filtered comparisons
+  for(comp in comp_order) {
+    df <- deg_filt_list[[comp]][[cell]] %>% rownames_to_column(var = "gene")
+    sheet_name <- paste0("Supplementary_Data_3", file_labels[counter])
+    
+    openxlsx::addWorksheet(wb, sheet_name)
+    openxlsx::writeData(wb, sheet_name, paste("Filtered results from differential expression analysis of", cell, "in", comp, "comparison", sep = " "), startRow = 1, colNames = FALSE)
+    openxlsx::writeData(wb, sheet_name, df, startRow = 2)
+    counter <- counter + 1
+  }
+}
+openxlsx::saveWorkbook(wb, paste(dir_list$docs, "Supplementary_Data_3.xlsx", sep = "/"), overwrite = TRUE)
+```
+
+
+## Supp Data 4 - Gene over-representation test results
+```{r}
+is_empty <- function(df) {
+  is.null(df) || nrow(df) == 0 || ncol(df) == 0
+}
+
+# Generate file labels: 26 (a-z) then aa-aj for 36 files total
+file_labels <- c(letters, paste0("a", letters[1:10]))  # "a" ... "z", then "aa", "ab", ..., "aj"
+counter <- 1
+
+wb <- openxlsx::createWorkbook()
+
+for(cell in cell_types) {
+  # Iterate through the comparisons
+  for(comp in comp_order) {
+    # Extracting the data frame for this cell type in this comparison
+    df <- go_ora_list[[comp]][[cell]]
+    
+    if(!is.null(df)) {
+      df <- df@result
+    }
+    
+    if(!is_empty(df)) {
+      # Constructing the filename using the current file label
+    sheet_name <- paste0("Supplementary_Data_4", file_labels[counter])
+    
+    openxlsx::addWorksheet(wb, sheet_name)
+    openxlsx::writeData(wb, sheet_name, paste("Results from over-representation test of", cell, "in", comp, "comparison", sep = " "), startRow = 1, colNames = FALSE)
+    openxlsx::writeData(wb, sheet_name, df, startRow = 2)
+    counter <- counter + 1
+    }
+    
+  }
+}
+openxlsx::saveWorkbook(wb, paste(dir_list$docs, "Supplementary_Data_4.xlsx", sep = "/"), overwrite = TRUE)
+```
+
+
+## Supp Data 8a - Frohlich dataset - label transfer predictions
+```{r}
+frohlich_data_so_major_types_umap_proj@meta.data %>% 
+  select(Donor, major_celltypes_relabel, starts_with("predict")) %>% 
+  rename("donor" = "Donor", 
+         "cell_type" = "major_celltypes_relabel") %>% 
+  rownames_to_column(var = "cell_id") %>% 
+  data.table::fwrite(file = paste(dir_list$docs, "Supplementary_Data_8a.csv", sep = "/"))
+```
+
+## Supp Data 8b - Frohlich - Number of cells of each cell type overlapping between predictions
+```{r}
+frohlich_data_so_major_types_umap_proj@meta.data %>% 
+  select(major_celltypes_relabel, predicted.id) %>% 
+  mutate(predicted.id = factor(predicted.id, levels = cell_type_levels)) %>% 
+  group_by(major_celltypes_relabel, predicted.id) %>%
+  summarise(n = n()) %>% 
+  pivot_wider(names_from = major_celltypes_relabel, values_from = n) %>% 
+  data.table::fwrite(file = paste(dir_list$docs, "Supplementary_Data_8b.csv", sep = "/"))
+```
+
+## Supp Data 8c - Velmeshev dataset - label transfer predictions
+```{r}
+velmeshev_data_so_major_types_umap_proj@meta.data %>% 
+  select(donor_id, cell_type, starts_with("predict")) %>% 
+  rownames_to_column(var = "cell_id") %>%
+  data.table::fwrite(file = paste(dir_list$docs, "Supplementary_Data_8c.csv", sep = "/"))
+```
+
+## Supp Data 8d - Velmeshev - Number of cells of each cell type overlapping between predictions
+```{r}
+velmeshev_data_so_major_types_umap_proj@meta.data %>% 
+  select(cell_type, predicted.id) %>% 
+  mutate(predicted.id = factor(predicted.id, levels = cell_type_levels)) %>%
+  group_by(cell_type, predicted.id) %>%
+  summarise(n = n()) %>% 
+  pivot_wider(names_from = cell_type, values_from = n) %>% 
+  data.table::fwrite(file = paste(dir_list$docs, "Supplementary_Data_8d.csv", sep = "/"))
+```
+
+
+
+
