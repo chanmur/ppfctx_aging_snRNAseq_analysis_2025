@@ -1,0 +1,32 @@
+﻿sample_name,sample_id,age,sex,pmi,cause_of_death,brain_region,pre_manifest_ad,age_group,sequencing_batch
+DA470_KP_sample_250,y7,18,Male,8,suicide,Middle frontal gyrus,Negative,Young,batch2
+DA463_KP_sample_249,y1,22,Male,8,suicide,Middle frontal gyrus,Negative,Young,batch1
+DA471_KP_sample_254,y8,25,Male,8,suicide,Middle frontal gyrus,Negative,Young,batch2
+DA466_KP_sample_171,y3,31,Male,8,suicide,Middle frontal gyrus,Negative,Young,batch1
+DA467_KP_sample_234,y4,31,Male,7,suicide,Middle frontal gyrus,Negative,Young,batch1
+DA469_KP_sample_243,y6,35,Male,6,suicide,Middle frontal gyrus,Negative,Young,batch2
+DA464_KP_sample_145,y2,36,Female,2,suicide,Middle frontal gyrus,Negative,Young,batch1
+DA468_KP_sample_136,y5,36,Male,6,suicide,Ventrolateral prefrontal cortex,Negative,Young,batch1
+DA818_KP_sample_210_1,y9,39,Female,12,suicide hanging,Middle frontal gyrus,Negative,Young,batch7
+AA90_KP_65_937,m1,42,Male,3.5,cardiac insufficiency,Ventrolateral prefrontal cortex,Negative,Middle Age,batch4
+DA826_KP_Sample_215_A968,m8,44,Female,5,acute cardiac insufficiency,Dorsolateral prefrontal cortex,Negative,Middle Age,batch6
+AA92_KP_156_855,m3,47,Male,1,cardiac insufficiency,Ventrolateral prefrontal cortex,Negative,Middle Age,batch5
+DA825_KP_Sample_175_720,m7,49,Female,6,suicide drug overdose,Ventrolateral prefrontal cortex,Negative,Middle Age,batch6
+AA93_KP_160_870,m4,50,Male,2,myocardial infarction,Ventrolateral prefrontal cortex,Negative,Middle Age,batch8
+AA94_KP_216_A199,m5,53,Male,5,pulmonary embolism,Ventrolateral prefrontal cortex,Negative,Middle Age,batch8
+AA91_KP_69_763,m2,55,Male,1,acute myocardial infarction,Ventrolateral prefrontal cortex,Negative,Middle Age,batch4
+DA823_KP_Sample_211_301,m6,56,Female,6,cardiorespiratory insufficiency,Ventrolateral prefrontal cortex,Negative,Middle Age,batch6
+AA108_KP_271_VLPFCX_female_ctrl,o8,70,Female,7,stroke,Ventrolateral prefrontal cortex,Negative,Old,batch9
+AA113_KP_260_VLPFCX_female_ctrl,o13,72,Female,1,pulmonary embolism,Ventrolateral prefrontal cortex,Negative,Old,batch8
+AA101_KP_180_VLPFCX_male_ctrl,o2,73,Male,6,acute cardiac failure;general arteriosclerosis,Ventrolateral prefrontal cortex,Negative,Old,batch8
+AA107_KP_204_VLPFCX_female_ctrl,o7,74,Female,1.5,cardiac insufficiency;pulmonary embolism,Ventrolateral prefrontal cortex,Negative,Old,batch8
+AA110_KP_87_VLPFCX_male_ctrl,o10,74,Male,1,acute cardiac insufficiency,Ventrolateral prefrontal cortex,Negative,Old,batch8
+AA109_KP_278_VLPFCX_male_ctrl,o9,75,Male,8,stroke,Ventrolateral prefrontal cortex,Negative,Old,batch8
+AA105_KP_290_VLPFCX_male_ctrl,o5,76,Male,5.5,stroke,Ventrolateral prefrontal cortex,Negative,Old,batch8
+AA103_KP_222_VLPFCX_male_ctrl,o4,80,Male,4.5,cardiorespiratory insufficiency,Ventrolateral prefrontal cortex,Negative,Old,batch8
+AA111_KP_147_VLPFCX_female_ctrl,o11,80,Female,1,acute respiratory insufficiency,Ventrolateral prefrontal cortex,Negative,Old,batch9
+AA102_KP_192_VLPFCX_male_ctrl,o3,81,Male,5,acute ischaemic heart failure;cardiogen shock,Ventrolateral prefrontal cortex,Negative,Old,batch8
+AA112_KP_221_VLPFCX_female_ctrl,o12,85,Female,4,acute cardiorespiratory;renal insufficiency,Ventrolateral prefrontal cortex,Positive,Old,batch8
+AA114_KP_283_VLPFCX_female_ctrl,o14,85,Female,8,stroke;hypertension,Ventrolateral prefrontal cortex,Negative,Old,batch8
+AA100_KP_164_VLPFCX_male_ctrl,o1,86,Male,3,acute cardiac insufficiency,Ventrolateral prefrontal cortex,Positive,Old,batch8
+AA106_KP_168_VLPFCX_female_ctrl,o6,94,Female,6,cardiac failure,Ventrolateral prefrontal cortex,Negative,Old,batch9
