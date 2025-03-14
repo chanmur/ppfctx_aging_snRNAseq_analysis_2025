@@ -1,4 +1,4 @@
-# The following rmd file runs all the code for the analysis described in the article: ""
+# The following rmd file generates all the plots and tables corresponding to snRNA-seq analysis in Muralidharan et al 2025, "Human brain cell-type-specific aging clocks based on single-nuclei transcriptomics" (doi: https://doi.org/10.1101/2025.02.28.640749)
 
 # Main Setup
 ## Directory Creation
@@ -67,6 +67,7 @@ training_data_so_qc <- readRDS(paste(dir_list$rds, "training_data_so_qc.rds", se
 
 training_data_so_qc@meta.data <- training_data_so_qc@meta.data %>% 
   mutate(orig.ident = factor(orig.ident, levels = sample_ids), 
+         sample_id = factor(sample_id, levels = sample_ids), 
          age_group = factor(age_group, levels = age_group_levels),
          sex = factor(sex, levels = sex_levels))
 
@@ -75,6 +76,7 @@ training_data_so_doublets <- readRDS(paste(dir_list$rds, "training_data_so_doubl
 
 training_data_so_doublets@meta.data <- training_data_so_doublets@meta.data %>% 
   mutate(orig.ident = factor(orig.ident, levels = sample_ids), 
+         sample_id = factor(sample_id, levels = sample_ids), 
          age_group = factor(age_group, levels = age_group_levels),
          sex = factor(sex, levels = sex_levels),
          cell_type = factor(cell_type, levels = cell_type_levels))
@@ -84,6 +86,7 @@ training_data_so_final <- readRDS(paste(dir_list$rds, "training_data_so_final.rd
 
 training_data_so_final@meta.data <- training_data_so_final@meta.data %>% 
   mutate(orig.ident = factor(orig.ident, levels = sample_ids), 
+         sample_id = factor(sample_id, levels = sample_ids),
          age_group = factor(age_group, levels = age_group_levels),
          sex = factor(sex, levels = sex_levels),
          cell_type = factor(cell_type, levels = cell_type_levels))
@@ -93,6 +96,7 @@ training_data_so_final_scaled <- readRDS(paste(dir_list$rds, "training_data_so_f
 
 training_data_so_final_scaled@meta.data <- training_data_so_final_scaled@meta.data %>% 
   mutate(orig.ident = factor(orig.ident, levels = sample_ids), 
+         sample_id = factor(sample_id, levels = sample_ids), 
          age_group = factor(age_group, levels = age_group_levels),
          sex = factor(sex, levels = sex_levels),
          cell_type = factor(cell_type, levels = cell_type_levels))
@@ -109,6 +113,7 @@ training_data_so_final_major_types <- readRDS(paste(dir_list$rds, "training_data
 
 training_data_so_final_major_types@meta.data <- training_data_so_final_major_types@meta.data %>% 
   mutate(orig.ident = factor(orig.ident, levels = sample_ids), 
+         sample_id = factor(sample_id, levels = sample_ids), 
          age_group = factor(age_group, levels = age_group_levels),
          sex = factor(sex, levels = sex_levels),
          cell_type = factor(cell_type, levels = cell_type_levels))
@@ -383,7 +388,7 @@ ggsave(paste(plot_name, "png", sep = "."), device = "png", bg = "white", limitsi
 ```{r}
 plot_name <- paste(dir_list$plots, "Supp_Fig_1e", sep = "/")
 
-cell_type_markers_extra <- c("MOG", "MAG", "C3", "CSF1R", "GJA1", "GFAP", "COL9A1", "VCAN", "SLC17A7", "NRGN", "GAD2", "SYNPR", "VIM", "FLT1", "COL6A1", "DCN", "CD96", "CD247")
+cell_type_markers_extra <- c("MOG", "MAG", "C3", "CSF1R", "GJA1", "GFAP", "COL9A1", "VCAN", "SLC17A7", "NRGN", "GAD2", "SYNPR", "VIM", "FLT1", "COL6A1", "DCN", "CD3E", "CD96", "CD247")
 
 scCustomize::Stacked_VlnPlot(training_data_so_final, features = cell_type_markers_extra, x_lab_rotate = TRUE)
 
@@ -608,9 +613,7 @@ pheatmap::pheatmap(exp_data[, rownames(col_ann)], scale = "row", cluster_rows = 
 ```{r}
 plot_name <- paste(dir_list$plots, "Supp_Fig_2b", sep = "/")
 
-description <- go_ora_list$`Old vs Young`$Oligodendrocytes@result %>% pull("Description")
-
-clusterProfiler::dotplot(go_ora_list$`Old vs Young`$Oligodendrocytes, showCategory = description) +
+clusterProfiler::dotplot(go_ora_list$`Old vs Young`$Oligodendrocytes) +
   theme(panel.grid = element_blank()) +
   scale_color_gradient(low = "firebrick1", high = "gray94")
 
@@ -686,9 +689,7 @@ pheatmap::pheatmap(exp_data[, rownames(col_ann)], scale = "row", cluster_rows = 
 ```{r}
 plot_name <- paste(dir_list$plots, "Supp_Fig_2e", sep = "/")
 
-description <- go_ora_list$`Old vs Young`$`Excitatory Neurons`@result %>% pull("Description")
-
-clusterProfiler::dotplot(go_ora_list$`Old vs Young`$`Excitatory Neurons`, showCategory = description) +
+clusterProfiler::dotplot(go_ora_list$`Old vs Young`$`Excitatory Neurons`) +
   theme(panel.grid = element_blank()) +
   scale_color_gradient(low = "firebrick1", high = "gray94")
 
@@ -810,15 +811,37 @@ ggsave(paste(plot_name, "png", sep = "."), device = "png", bg = "white", limitsi
 
 
 # Tables
+## Supp Data 1b - Number of cells per sample at each stage of QC
+```{r}
+cell_count_table <- training_data_so_qc@meta.data %>% 
+  select(sample_id) %>% 
+  summarise("# of Nuclei Recovered" = n(), .by = c("sample_id"))
+
+cell_count_table <- training_data_so_doublets@meta.data %>% 
+  select(sample_id) %>% 
+  summarise("# of Nuclei After Quality Control (After selecting nuclei with reads 1200 - 100000, gene counts 800 - 12000 and less than 5% mitochondrial reads)" = n(), .by = c("sample_id")) %>% 
+  inner_join(cell_count_table, by = "sample_id")
+
+cell_count_table <- training_data_so_final@meta.data %>% 
+  select(sample_id) %>% 
+  summarise("# of Nuclei After Doublet Removal" = n(), .by = c("sample_id")) %>% 
+  inner_join(cell_count_table, by = "sample_id") %>% 
+  arrange(sample_id)
+
+cell_count_table %>% 
+  data.table::fwrite(file = paste(dir_list$docs, "Supplementary_Data_1b.csv", sep = "/"))
+```
+
 ## Supp Data 1c - Number of cells per type per sample
 ```{r}
-frohlich_data_so_major_types_umap_proj@meta.data %>% 
-  select(major_celltypes_relabel, predicted.id) %>% 
-  mutate(predicted.id = factor(predicted.id, levels = cell_type_levels)) %>% 
-  group_by(major_celltypes_relabel, predicted.id) %>%
+training_data_so_final@meta.data %>% 
+  select(sample_id, cell_type) %>% 
+  mutate(sample_id = factor(sample_id, levels = sample_ids)) %>% 
+  group_by(sample_id, cell_type) %>%
   summarise(n = n()) %>% 
-  pivot_wider(names_from = major_celltypes_relabel, values_from = n) %>% 
-  data.table::fwrite(file = paste(dir_list$docs, "Supplementary_Data_8b.csv", sep = "/"))
+  pivot_wider(names_from = cell_type, values_from = n, values_fill = 0) %>% 
+  select(sample_id, cell_type_levels) %>% 
+  data.table::fwrite(file = paste(dir_list$docs, "Supplementary_Data_1c.csv", sep = "/"))
 ```
 
 ## Supp Data 2 - All Markers in each cell type in the training dataset
