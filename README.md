@@ -1,4 +1,5 @@
-Instructions to generate plots and tables:
+Instructions for generating plots and tables
+========================================================================
 
 All the code for generating plots and tables can be found in the Main.Rmd file. Please follow the following steps to generate them after cloning the repository to your local machine:
 
