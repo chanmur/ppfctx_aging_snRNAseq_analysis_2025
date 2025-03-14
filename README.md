@@ -1,5 +1,18 @@
+Instructions to generate plots and tables:
+
+All the code for generating plots and tables can be found in the Main.Rmd file. Please follow the following steps to generate them after cloning the repository to your local machine:
+
+1. Restore renv from the lockfile and restart the session
+2. Run the "Main Setup" section in the Main.Rmd file
+3. Copy the rds files to the "rds" directory
+4. Run the remaining sections in the Main.Rmd file
+
+After successfully running the entire Rmd file, all the plots generated will be available in the "plots" directory, while all the tables generated will be in the "docs" directory.
+
+The code used for generating the rds files can be found under src/R.
+
 Session Info:
-=========================================================================================
+
 R version 4.3.1 (2023-06-16)
 Platform: aarch64-apple-darwin20 (64-bit)
 Running under: macOS Ventura 13.2.1
@@ -84,5 +97,3 @@ loaded via a namespace (and not attached):
 [178] memoise_2.0.1           ggtree_3.9.1            fastmatch_1.1-4        
 [181] bit_4.0.5               downloader_0.4          gson_0.1.0             
 [184] ape_5.7-1  
-
-===============================================================================
